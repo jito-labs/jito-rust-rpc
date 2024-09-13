@@ -15,6 +15,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Err(e) => eprintln!("Error: {:?}", e),
     }
-
+ 
+    /*
+    let random_tip_account = sdk.get_random_tip_account().await?;
+    println!("Random tip account: {}", random_tip_account);
+    */
     Ok(())
 }
