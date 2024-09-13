@@ -13,8 +13,14 @@ use std::fs::File;
 use std::io::BufReader;
 use serde_json::json;
 use bs58;
-use tokio::time::{sleep, Duration}; 
+use tokio::time::{sleep, Duration};
 
+#[derive(Debug)]
+struct BundleStatus {
+    confirmation_status: Option<String>,
+    err: Option<serde_json::Value>,
+    transactions: Option<Vec<String>>,
+}
 
 fn load_keypair(path: &str) -> Result<Keypair> {
     let file = File::open(path)?;
@@ -160,67 +166,25 @@ async fn main() -> Result<()> {
         println!("Checking final bundle status (attempt {}/{})", attempt, max_retries);
 
         let status_response = jito_sdk.get_bundle_statuses(vec![bundle_uuid.to_string()]).await?;
+        let bundle_status = get_bundle_status(&status_response)?;
 
-        if let Some(result) = status_response.get("result") {
-            if let Some(value) = result.get("value") {
-                if let Some(statuses) = value.as_array() {
-                    if let Some(bundle_status) = statuses.get(0) {
-                        if let Some(confirmation_status) = bundle_status.get("confirmation_status") {
-                            match confirmation_status.as_str() {
-                                Some("confirmed") => {
-                                    println!("Bundle confirmed on-chain. Waiting for finalization...");
-                                    if let Some(err) = bundle_status.get("err") {
-                                        if err["Ok"].is_null() {
-                                            println!("Transaction executed without errors.");
-                                        } else {
-                                            println!("Transaction encountered an error: {:?}", err);
-                                            return Err(anyhow!("Transaction encountered an error"));
-                                        }
-                                    }
-                                    // Continue polling for finalized status
-                                },
-                                Some("finalized") => {
-                                    println!("Bundle finalized on-chain successfully!");
-                                    if let Some(err) = bundle_status.get("err") {
-                                        if err["Ok"].is_null() {
-                                            println!("Transaction executed without errors.");
-                                            if let Some(transactions) = bundle_status.get("transactions") {
-                                                if let Some(tx_id) = transactions.as_array().and_then(|txs| txs.get(0)).and_then(|tx| tx.as_str()) {
-                                                    println!("Transaction URL: https://solscan.io/tx/{}", tx_id);
-                                                } else {
-                                                    println!("Unable to extract transaction ID.");
-                                                }
-                                            } else {
-                                                println!("No transactions found in the bundle status.");
-                                            }
-                                        } else {
-                                            println!("Transaction encountered an error: {:?}", err);
-                                            return Err(anyhow!("Transaction encountered an error"));
-                                        }
-                                    }
-                                    return Ok(());
-                                },
-                                Some(status) => {
-                                    println!("Unexpected final bundle status: {}. Continuing to poll...", status);
-                                },
-                                None => {
-                                    println!("Unable to parse final bundle status. Continuing to poll...");
-                                }
-                            }
-                        } else {
-                            println!("Confirmation status field not found in final bundle status. Continuing to poll...");
-                        }
-                    } else {
-                        println!("Final bundle status not found. Continuing to poll...");
-                    }
-                } else {
-                    println!("Unexpected value format for final bundle status. Continuing to poll...");
-                }
-            } else {
-                println!("Value field not found in result for final bundle status. Continuing to poll...");
+        match bundle_status.confirmation_status.as_deref() {
+            Some("confirmed") => {
+                println!("Bundle confirmed on-chain. Waiting for finalization...");
+                check_transaction_error(&bundle_status)?;
+            },
+            Some("finalized") => {
+                println!("Bundle finalized on-chain successfully!");
+                check_transaction_error(&bundle_status)?;
+                print_transaction_url(&bundle_status);
+                return Ok(());
+            },
+            Some(status) => {
+                println!("Unexpected final bundle status: {}. Continuing to poll...", status);
+            },
+            None => {
+                println!("Unable to parse final bundle status. Continuing to poll...");
             }
-        } else {
-            println!("Unexpected response format for final bundle status. Continuing to poll...");
         }
 
         if attempt < max_retries {
@@ -229,4 +193,46 @@ async fn main() -> Result<()> {
     }
 
     Err(anyhow!("Failed to get finalized status after {} attempts", max_retries))
+}
+
+fn get_bundle_status(status_response: &serde_json::Value) -> Result<BundleStatus> {
+    status_response
+        .get("result")
+        .and_then(|result| result.get("value"))
+        .and_then(|value| value.as_array())
+        .and_then(|statuses| statuses.get(0))
+        .ok_or_else(|| anyhow!("Failed to parse bundle status"))
+        .map(|bundle_status| BundleStatus {
+            confirmation_status: bundle_status.get("confirmation_status").and_then(|s| s.as_str()).map(String::from),
+            err: bundle_status.get("err").cloned(),
+            transactions: bundle_status.get("transactions").and_then(|t| t.as_array()).map(|arr| {
+                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            }),
+        })
+}
+
+fn check_transaction_error(bundle_status: &BundleStatus) -> Result<()> {
+    if let Some(err) = &bundle_status.err {
+        if err["Ok"].is_null() {
+            println!("Transaction executed without errors.");
+            Ok(())
+        } else {
+            println!("Transaction encountered an error: {:?}", err);
+            Err(anyhow!("Transaction encountered an error"))
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn print_transaction_url(bundle_status: &BundleStatus) {
+    if let Some(transactions) = &bundle_status.transactions {
+        if let Some(tx_id) = transactions.first() {
+            println!("Transaction URL: https://solscan.io/tx/{}", tx_id);
+        } else {
+            println!("Unable to extract transaction ID.");
+        }
+    } else {
+        println!("No transactions found in the bundle status.");
+    }
 }
