@@ -10,3 +10,13 @@ Jito JSON-RPC Rust SDK
 ```
 cargo run --example basic_usage
 ```
+
+## Basic Transaction
+```
+cargo run --example basic_txn
+```
+
+## Basic Bundle
+```
+cargo run --example basic_bundle
+```
