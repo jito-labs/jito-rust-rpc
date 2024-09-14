@@ -94,10 +94,6 @@ To run the basic bundle example:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License
-
-[Add your license information here]
-
 ## Support
 
 For support, please join our [Discord community](https://discord.gg/jTSmEzaR).
