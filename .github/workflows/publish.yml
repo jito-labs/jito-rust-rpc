@@ -10,8 +10,6 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
     steps:
       - uses: actions/checkout@v2
 
@@ -22,33 +20,20 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Update Cargo.toml
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          if [[ "${{ github.ref }}" == refs/heads/master ]]; then
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # If it's a tag, publish as is
+            cargo publish
+          elif [[ "${{ github.ref }}" == refs/heads/master ]]; then
+            # If it's a push to master, publish as a pre-release version
             VERSION=$(grep '^version =' Cargo.toml | sed -E 's/version = "(.*?)"/\1/')
             COMMIT_HASH=$(git rev-parse --short HEAD)
             NEW_VERSION="${VERSION}-pre.${COMMIT_HASH}"
             sed -i "s/^version = \".*\"/version = \"${NEW_VERSION}\"/" Cargo.toml
-            
-            # Add missing metadata
-            sed -i '/^version = / a description = "Jito'"'"'s Rust RPC Library"' Cargo.toml
-            sed -i '/^description = / a license = "MIT"' Cargo.toml
-            sed -i '/^license = / a repository = "https://github.com/jito-labs/jito-rust-rpc"' Cargo.toml
-          fi
-          cat Cargo.toml
-
-      - name: Debug Token
-        run: |
-          echo "CARGO_REGISTRY_TOKEN is set: ${{ env.CARGO_REGISTRY_TOKEN != '' }}"
-          echo "CARGO_REGISTRY_TOKEN length: ${#CARGO_REGISTRY_TOKEN}"
-
-      - name: Publish to crates.io
-        run: |
-          echo "CARGO_REGISTRY_TOKEN length in publish step: ${#CARGO_REGISTRY_TOKEN}"
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            cargo publish || cargo publish --verbose
-          elif [[ "${{ github.ref }}" == refs/heads/master ]]; then
-            cargo publish --allow-dirty || cargo publish --allow-dirty --verbose
+            cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --allow-dirty
           else
             echo "Not publishing: not a push to master or a tag"
           fi
