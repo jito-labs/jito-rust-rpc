@@ -10,6 +10,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
     steps:
       - uses: actions/checkout@v2
 
@@ -37,23 +39,16 @@ jobs:
 
       - name: Debug Token
         run: |
-          echo "CRATES_IO_TOKEN is set: ${{ secrets.CRATES_IO_TOKEN != '' }}"
-          echo "CRATES_IO_TOKEN length: ${#CRATES_IO_TOKEN}"
           echo "CARGO_REGISTRY_TOKEN is set: ${{ env.CARGO_REGISTRY_TOKEN != '' }}"
           echo "CARGO_REGISTRY_TOKEN length: ${#CARGO_REGISTRY_TOKEN}"
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
 
       - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           echo "CARGO_REGISTRY_TOKEN length in publish step: ${#CARGO_REGISTRY_TOKEN}"
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            cargo publish --token "$CARGO_REGISTRY_TOKEN" || cargo publish --token "$CARGO_REGISTRY_TOKEN" --verbose
+            cargo publish || cargo publish --verbose
           elif [[ "${{ github.ref }}" == refs/heads/master ]]; then
-            cargo publish --token "$CARGO_REGISTRY_TOKEN" --allow-dirty || cargo publish --token "$CARGO_REGISTRY_TOKEN" --allow-dirty --verbose
+            cargo publish --allow-dirty || cargo publish --allow-dirty --verbose
           else
             echo "Not publishing: not a push to master or a tag"
           fi
