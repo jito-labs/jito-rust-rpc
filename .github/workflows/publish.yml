@@ -29,7 +29,7 @@ jobs:
             sed -i "s/^version = \".*\"/version = \"${NEW_VERSION}\"/" Cargo.toml
             
             # Add missing metadata
-            sed -i '/^version = / a description = "Jito's Rust RPC Library"' Cargo.toml
+            sed -i '/^version = / a description = "Jito'"'"'s Rust RPC Library"' Cargo.toml
             sed -i '/^description = / a license = "MIT"' Cargo.toml
             sed -i '/^license = / a repository = "https://github.com/jito-labs/jito-rust-rpc"' Cargo.toml
           fi
