@@ -33,7 +33,7 @@ jobs:
             COMMIT_HASH=$(git rev-parse --short HEAD)
             NEW_VERSION="${VERSION}-pre.${COMMIT_HASH}"
             sed -i "s/^version = \".*\"/version = \"${NEW_VERSION}\"/" Cargo.toml
-            cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --allow-dirty
+            cargo publish --token "${{ secrets.CRATES_IO_TOKEN }}" --allow-dirty
           else
             echo "Not publishing: not a push to master or a tag"
           fi
