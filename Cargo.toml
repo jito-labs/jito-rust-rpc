@@ -1,7 +1,15 @@
 [package]
 name = "jito-sdk-rust"
 version = "0.1.0"
+authors = ["mdr0id <marshall@jito.wtf>"]
 edition = "2021"
+
+# Add these fields
+description = "Rust SDK for interacting with Jito RPC services on Solana"
+license = "MIT"
+repository = "https://github.com/jito-labs/jito-rust-rpc"
+homepage = "https://www.jito.wtf/"
+keywords = ["solana", "rpc", "jito", "blockchain", "sdk"]
 
 [dependencies]
 reqwest = { version = "0.11", features = ["json"] }
