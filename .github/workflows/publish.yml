@@ -2,10 +2,8 @@ name: Publish to crates.io
 
 on:
   push:
-    branches:
-      - master  # Trigger on push to master branch
     tags:
-      - 'v*'  # Trigger when any tag is pushed
+      - 'v*'
 
 jobs:
   publish:
