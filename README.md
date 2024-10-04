@@ -2,8 +2,8 @@
 
 [![Discord](https://img.shields.io/discord/938287290806042626?label=Discord&logo=discord&style=flat&color=7289DA)](https://discord.gg/jTSmEzaR)
 ![Rust](https://img.shields.io/badge/Rust-Language-orange?logo=rust)
-![Crates.io](https://img.shields.io/crates/v/crate_name?label=crates.io&logo=rust)
-[![docs.rs](https://img.shields.io/badge/docs.rs-crate_name-blue?logo=rust)](https://docs.rs/crate_name)
+![Crates.io](https://img.shields.io/crates/v/jito_sdk_rust?label=crates.io&logo=rust)
+[![docs.rs](https://img.shields.io/badge/docs.rs-jito_sdk_rust-blue?logo=rust)](https://docs.rs/jito-sdk-rust/0.1.0/jito_sdk_rust/)
 
 The Jito JSON-RPC Rust SDK provides an interface for interacting with Jito's enhanced Solana infrastructure. This SDK supports methods for managing bundles and transactions, offering improved performance and additional features while interacting with the Block Engine.
 
