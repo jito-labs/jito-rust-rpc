@@ -1,25 +1,17 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose, Engine as _};
 use jito_sdk_rust::JitoJsonRpcSDK;
+use serde_json::json;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::{Keypair, Signer},
+    signer::EncodableKey,
     system_instruction,
     transaction::Transaction,
 };
-use base64::{Engine as _, engine::general_purpose};
 use std::str::FromStr;
-use std::fs::File;
-use std::io::BufReader;
-use serde_json::json;
-
-fn load_keypair(path: &str) -> Result<Keypair> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let wallet: Vec<u8> = serde_json::from_reader(reader)?;
-    Ok(Keypair::from_bytes(&wallet)?)
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -31,10 +23,11 @@ async fn main() -> Result<()> {
 
     // Setup client Jito Block Engine endpoint with UUID
     //let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", "UUID-API-KEY");
-    
+
     // Load the sender's keypair
-    let sender = load_keypair("/path/to/wallet.json" )?;
-    
+    let sender =
+        Keypair::read_from_file("/path/to/wallet.json").expect("Failed to read wallet file");
+
     println!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
@@ -48,21 +41,12 @@ async fn main() -> Result<()> {
     let priority_fee_amount = 7_000; // 0.000007 SOL
 
     // Create instructions
-    let prior_fee_ix = system_instruction::transfer(
-        &sender.pubkey(),
-        &jito_tip_account,
-        priority_fee_amount,
-    );
-    let main_transfer_ix = system_instruction::transfer(
-        &sender.pubkey(),
-        &receiver,
-        main_transfer_amount,
-    );
-    let jito_tip_ix = system_instruction::transfer(
-        &sender.pubkey(),
-        &jito_tip_account,
-        jito_tip_amount,
-    );
+    let prior_fee_ix =
+        system_instruction::transfer(&sender.pubkey(), &jito_tip_account, priority_fee_amount);
+    let main_transfer_ix =
+        system_instruction::transfer(&sender.pubkey(), &receiver, main_transfer_amount);
+    let jito_tip_ix =
+        system_instruction::transfer(&sender.pubkey(), &jito_tip_account, jito_tip_amount);
 
     // Create transaction with all instructions
     let mut transaction = Transaction::new_with_payer(
@@ -93,14 +77,16 @@ async fn main() -> Result<()> {
     println!("Transaction sent with signature: {}", signature);
 
     // Confirm transaction
-    let confirmation = solana_rpc.confirm_transaction_with_spinner(
+    solana_rpc.confirm_transaction_with_spinner(
         &signature.parse()?,
         &solana_rpc.get_latest_blockhash()?,
         CommitmentConfig::confirmed(),
     )?;
-    println!("Transaction confirmed: {:?}", confirmation);
 
-    println!("View transaction on Solscan: https://solscan.io/tx/{}", signature);
+    println!(
+        "View transaction on Solscan: https://solscan.io/tx/{}",
+        signature
+    );
 
     Ok(())
 }

@@ -60,7 +60,7 @@ To run the basic transaction example:
 
    ```rust
    // Load the sender's keypair
-   let sender = load_keypair("/path/to/wallet.json")?;
+   let sender = Keypair::read_from_file(("/path/to/wallet.json").expect("Failed to read wallet file");
 
    // Set up receiver pubkey
    let receiver = Pubkey::from_str("YOUR_RECEIVER_PUBKEY")?;
@@ -79,7 +79,7 @@ To run the basic bundle example:
 
    ```rust
    // Load the sender's keypair
-   let sender = load_keypair("/path/to/wallet.json")?;
+   let sender = Keypair::read_from_file(("/path/to/wallet.json").expect("Failed to read wallet file");
 
    // Set up receiver pubkey
    let receiver = Pubkey::from_str("YOUR_RECEIVER_PUBKEY")?;
