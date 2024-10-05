@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
         if let Some(result) = status_response.get("result") {
             if let Some(value) = result.get("value") {
                 if let Some(statuses) = value.as_array() {
-                    if let Some(bundle_status) = statuses.get(0) {
+                    if let Some(bundle_status) = statuses.first() {
                         if let Some(status) = bundle_status.get("status") {
                             match status.as_str() {
                                 Some("Landed") => {
@@ -204,7 +204,7 @@ fn get_bundle_status(status_response: &serde_json::Value) -> Result<BundleStatus
         .get("result")
         .and_then(|result| result.get("value"))
         .and_then(|value| value.as_array())
-        .and_then(|statuses| statuses.get(0))
+        .and_then(|statuses| statuses.first())
         .ok_or_else(|| anyhow!("Failed to parse bundle status"))
         .map(|bundle_status| BundleStatus {
             confirmation_status: bundle_status

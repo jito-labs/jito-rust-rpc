@@ -77,12 +77,11 @@ async fn main() -> Result<()> {
     println!("Transaction sent with signature: {}", signature);
 
     // Confirm transaction
-    let confirmation = solana_rpc.confirm_transaction_with_spinner(
+    solana_rpc.confirm_transaction_with_spinner(
         &signature.parse()?,
         &solana_rpc.get_latest_blockhash()?,
         CommitmentConfig::confirmed(),
     )?;
-    println!("Transaction confirmed: {:?}", confirmation);
 
     println!(
         "View transaction on Solscan: https://solscan.io/tx/{}",
