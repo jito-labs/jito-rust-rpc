@@ -7,6 +7,7 @@ use solana_sdk::{
     signature::{Keypair, Signer},
     system_instruction,
     transaction::Transaction,
+    compute_budget::ComputeBudgetInstruction,
 };
 use base64::{Engine as _, engine::general_purpose};
 use std::str::FromStr;
@@ -38,7 +39,7 @@ async fn main() -> Result<()> {
     println!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
-    let receiver = Pubkey::from_str("YOUR_RECIEVER_PUBKEY")?;
+    let receiver = Pubkey::from_str("YOUR_RECIEVER_KEY")?;
     let random_tip_account = jito_sdk.get_random_tip_account().await?;
     let jito_tip_account = Pubkey::from_str(&random_tip_account)?;
 
@@ -47,12 +48,11 @@ async fn main() -> Result<()> {
     let jito_tip_amount = 1_000; // 0.000001 SOL
     let priority_fee_amount = 7_000; // 0.000007 SOL
 
+
+    // Create priority fee instruction
+    let set_compute_unit_price_ix = ComputeBudgetInstruction::set_compute_unit_price(priority_fee_amount);
+
     // Create instructions
-    let prior_fee_ix = system_instruction::transfer(
-        &sender.pubkey(),
-        &jito_tip_account,
-        priority_fee_amount,
-    );
     let main_transfer_ix = system_instruction::transfer(
         &sender.pubkey(),
         &receiver,
@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
 
     // Create transaction with all instructions
     let mut transaction = Transaction::new_with_payer(
-        &[prior_fee_ix, main_transfer_ix, jito_tip_ix],
+        &[set_compute_unit_price_ix, main_transfer_ix, jito_tip_ix],
         Some(&sender.pubkey()),
     );
 
