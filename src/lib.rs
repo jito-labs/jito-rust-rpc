@@ -117,25 +117,33 @@ impl JitoJsonRpcSDK {
             endpoint = format!("{}?uuid={}", endpoint, uuid);
         }
     
-        // Ensure params is an array of transactions
-        let transactions = match params {
+        // Create the parameters for the request
+        let request_params = match params {
+            // If params is already in the correct format [transactions, {encoding: "base64"}]
+            Some(ref value) if value.is_array() && value.as_array().unwrap().len() == 2 => {
+                // Use it as is
+                value.clone()
+            },
             Some(Value::Array(transactions)) => {
+                // Validate transactions
                 if transactions.is_empty() {
                     return Err(anyhow!("Bundle must contain at least one transaction"));
                 }
                 if transactions.len() > 5 {
                     return Err(anyhow!("Bundle can contain at most 5 transactions"));
                 }
-                transactions
+                
+                json!([
+                    transactions,
+                    {
+                        "encoding": "base64"
+                    }
+                ])
             },
             _ => return Err(anyhow!("Invalid bundle format: expected an array of transactions")),
         };
     
-        // Wrap the transactions array in another array
-        let params = json!([transactions]);
-    
-        // Send the wrapped transactions array
-        self.send_request(&endpoint, "sendBundle", Some(params))
+        self.send_request(&endpoint, "sendBundle", Some(request_params))
             .await
             .map_err(|e| anyhow!("Request error: {}", e))
     }
@@ -153,7 +161,6 @@ impl JitoJsonRpcSDK {
             format!("/transactions?{}", query_params.join("&"))
         };
 
-        // Construct params as an array instead of an object
         let params = match params {
             Some(Value::Object(map)) => {
                 let tx = map.get("tx").and_then(Value::as_str).unwrap_or_default();
@@ -179,7 +186,6 @@ impl JitoJsonRpcSDK {
             "/bundles".to_string()
         };
 
-        // Construct the params as a list within a list
         let params = json!([bundle_uuids]);
 
         self.send_request(&endpoint, "getInflightBundleStatuses", Some(params))
@@ -187,7 +193,7 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    // Helper method to convert Value to PrettyJsonValue
+    // Helper method 
     pub fn prettify(value: Value) -> PrettyJsonValue {
         PrettyJsonValue(value)
     }

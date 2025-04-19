@@ -12,7 +12,7 @@ use std::str::FromStr;
 use std::fs::File;
 use std::io::BufReader;
 use serde_json::json;
-use bs58;
+use base64::{Engine as _, engine::general_purpose}; // Replace bs58 with base64
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug)]
@@ -41,11 +41,11 @@ async fn main() -> Result<()> {
     //let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", "UUID-API-KEY");
 
     // Load the sender's keypair
-    let sender = load_keypair("/path/to/wallet.json" )?;
+    let sender = load_keypair("/path/to/wallet.json")?;
     println!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
-    let receiver = Pubkey::from_str("YOUR_RECIEVER_PUBKEY")?;
+    let receiver = Pubkey::from_str("RECIEVER_KEY")?;
     let random_tip_account = jito_sdk.get_random_tip_account().await?;
     let jito_tip_account = Pubkey::from_str(&random_tip_account)?;
 
@@ -83,82 +83,90 @@ async fn main() -> Result<()> {
     let recent_blockhash = solana_rpc.get_latest_blockhash()?;
     transaction.sign(&[&sender], recent_blockhash);
 
-    // Serialize the transaction
-    let serialized_tx = bs58::encode(bincode::serialize(&transaction)?).into_string();
+    // Serialize the transaction using base64 instead of base58
+    let serialized_tx = general_purpose::STANDARD.encode(bincode::serialize(&transaction)?);
     
     // Prepare bundle for submission (array of transactions)
-    let bundle = json!([serialized_tx]);
+    let transactions = json!([serialized_tx]);
+    
+    // Create parameters with encoding specification
+    let params = json!([
+        transactions,
+        {
+            "encoding": "base64"
+        }
+    ]);
 
     // UUID for the bundle
     let uuid = None;
 
     // Send bundle using Jito SDK
-     println!("Sending bundle with 1 transaction...");
-     let response = jito_sdk.send_bundle(Some(bundle), uuid).await?;
+    println!("Sending bundle with 1 transaction...");
+    let response = jito_sdk.send_bundle(Some(params), uuid).await?;
  
-     // Extract bundle UUID from response
-     let bundle_uuid = response["result"]
-         .as_str()
-         .ok_or_else(|| anyhow!("Failed to get bundle UUID from response"))?;
-     println!("Bundle sent with UUID: {}", bundle_uuid);
+    // Extract bundle UUID from response
+    let bundle_uuid = response["result"]
+        .as_str()
+        .ok_or_else(|| anyhow!("Failed to get bundle UUID from response"))?;
+    println!("Bundle sent with UUID: {}", bundle_uuid);
  
-     // Confirm bundle status
-     let max_retries = 10;
-     let retry_delay = Duration::from_secs(2);
+    // Confirm bundle status
+    let max_retries = 10;
+    let retry_delay = Duration::from_secs(2);
  
-     for attempt in 1..=max_retries {
-         println!("Checking bundle status (attempt {}/{})", attempt, max_retries);
+    for attempt in 1..=max_retries {
+        println!("Checking bundle status (attempt {}/{})", attempt, max_retries);
  
-         let status_response = jito_sdk.get_in_flight_bundle_statuses(vec![bundle_uuid.to_string()]).await?;
+        let status_response = jito_sdk.get_in_flight_bundle_statuses(vec![bundle_uuid.to_string()]).await?;
  
-         if let Some(result) = status_response.get("result") {
-             if let Some(value) = result.get("value") {
-                 if let Some(statuses) = value.as_array() {
-                     if let Some(bundle_status) = statuses.get(0) {
-                         if let Some(status) = bundle_status.get("status") {
-                             match status.as_str() {
-                                 Some("Landed") => {
-                                     println!("Bundle landed on-chain. Checking final status...");
-                                     return check_final_bundle_status(&jito_sdk, bundle_uuid).await;
-                                 },
-                                 Some("Pending") => {
-                                     println!("Bundle is pending. Waiting...");
-                                 },
-                                 Some(status) => {
-                                     println!("Unexpected bundle status: {}. Waiting...", status);
-                                 },
-                                 None => {
-                                     println!("Unable to parse bundle status. Waiting...");
-                                 }
-                             }
-                         } else {
-                             println!("Status field not found in bundle status. Waiting...");
-                         }
-                     } else {
-                         println!("Bundle status not found. Waiting...");
-                     }
-                 } else {
-                     println!("Unexpected value format. Waiting...");
-                 }
-             } else {
-                 println!("Value field not found in result. Waiting...");
+        if let Some(result) = status_response.get("result") {
+            if let Some(value) = result.get("value") {
+                if let Some(statuses) = value.as_array() {
+                    if let Some(bundle_status) = statuses.get(0) {
+                        if let Some(status) = bundle_status.get("status") {
+                            match status.as_str() {
+                                Some("Landed") => {
+                                    println!("Bundle landed on-chain. Checking final status...");
+                                    return check_final_bundle_status(&jito_sdk, bundle_uuid).await;
+                                },
+                                Some("Pending") => {
+                                    println!("Bundle is pending. Waiting...");
+                                },
+                                Some(status) => {
+                                    println!("Unexpected bundle status: {}. Waiting...", status);
+                                },
+                                None => {
+                                    println!("Unable to parse bundle status. Waiting...");
+                                }
+                            }
+                        } else {
+                            println!("Status field not found in bundle status. Waiting...");
+                        }
+                    } else {
+                        println!("Bundle status not found. Waiting...");
+                    }
+                } else {
+                    println!("Unexpected value format. Waiting...");
+                }
+            } else {
+                println!("Value field not found in result. Waiting...");
 
-             }
-         } else if let Some(error) = status_response.get("error") {
-             println!("Error checking bundle status: {:?}", error);
-         } else {
-             println!("Unexpected response format. Waiting...");
-         }
+            }
+        } else if let Some(error) = status_response.get("error") {
+            println!("Error checking bundle status: {:?}", error);
+        } else {
+            println!("Unexpected response format. Waiting...");
+        }
  
-         if attempt < max_retries {
-             sleep(retry_delay).await;
-         }
-     }
+        if attempt < max_retries {
+            sleep(retry_delay).await;
+        }
+    }
  
-     Err(anyhow!("Failed to confirm bundle status after {} attempts", max_retries))
- }
+    Err(anyhow!("Failed to confirm bundle status after {} attempts", max_retries))
+}
 
- async fn check_final_bundle_status(jito_sdk: &JitoJsonRpcSDK, bundle_uuid: &str) -> Result<()> {
+async fn check_final_bundle_status(jito_sdk: &JitoJsonRpcSDK, bundle_uuid: &str) -> Result<()> {
     let max_retries = 10;
     let retry_delay = Duration::from_secs(2);
 

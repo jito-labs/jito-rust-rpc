@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     println!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
-    let receiver = Pubkey::from_str("YOUR_RECIEVER_KEY")?;
+    let receiver = Pubkey::from_str("RECIEVER_KEY")?;
     let random_tip_account = jito_sdk.get_random_tip_account().await?;
     let jito_tip_account = Pubkey::from_str(&random_tip_account)?;
 
@@ -84,7 +84,7 @@ async fn main() -> Result<()> {
     let params = json!({
         "tx": serialized_tx
     });
-    let response = jito_sdk.send_txn(Some(params), true).await?;
+    let response = jito_sdk.send_txn(Some(params), false).await?;
 
     // Extract signature from response
     let signature = response["result"]
