@@ -2,8 +2,8 @@
 
 [![Discord](https://img.shields.io/discord/938287290806042626?label=Discord&logo=discord&style=flat&color=7289DA)](https://discord.gg/jTSmEzaR)
 ![Rust](https://img.shields.io/badge/Rust-Language-orange?logo=rust)
-![Crates.io](https://img.shields.io/crates/v/jito_sdk_rust?label=crates.io&logo=rust)
-[![docs.rs](https://img.shields.io/badge/docs.rs-jito_sdk_rust-blue?logo=rust)](https://docs.rs/jito-sdk-rust/0.1.0/jito_sdk_rust/)
+[![Crates.io](https://img.shields.io/crates/v/jito_sdk_rust?label=crates.io&logo=rust)](https://crates.io/crates/jito-sdk-rust)
+[![docs.rs](https://img.shields.io/badge/docs.rs-jito_sdk_rust-blue?logo=rust)](https://docs.rs/jito-sdk-rust/latest/jito_sdk_rust/)
 
 The Jito JSON-RPC Rust SDK provides an interface for interacting with Jito's enhanced Solana infrastructure. This SDK supports methods for managing bundles and transactions, offering improved performance and additional features while interacting with the Block Engine.
 
@@ -47,7 +47,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jito-sdk-rust = "0.1.0"  # Replace with the actual version
+jito-sdk-rust = "0.2.0"  # Replace with the actual version
 ```
 
 ## Usage Examples
