@@ -5,25 +5,34 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::{Keypair, Signer},
+    signer::EncodableKey,
     system_instruction,
     transaction::Transaction,
     compute_budget::ComputeBudgetInstruction,
 };
 use base64::{Engine as _, engine::general_purpose};
 use std::str::FromStr;
-use std::fs::File;
-use std::io::BufReader;
 use serde_json::json;
+use tracing::{info, debug};
+use tracing_subscriber::EnvFilter;
 
-fn load_keypair(path: &str) -> Result<Keypair> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let wallet: Vec<u8> = serde_json::from_reader(reader)?;
-    Ok(Keypair::from_bytes(&wallet)?)
+fn init_tracing() {
+    // This sets up logging with RUST_LOG environment variable
+    // If RUST_LOG is not set, defaults to "info" level
+    // Use RUST_LOG=off to disable logging entirely
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info"))
+        )
+        .init();
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize tracing
+    init_tracing();
+
     // Set up Solana RPC client (for getting recent blockhash and confirming transaction)
     let solana_rpc = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
 
@@ -31,12 +40,14 @@ async fn main() -> Result<()> {
     let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", None);
 
     // Setup client Jito Block Engine endpoint with UUID
-    //let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", "UUID-API-KEY");
+    // let uuid_string = "your-uuid-here".to_string();
+    // let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", Some(uuid_string));
     
-    // Load the sender's keypair
-    let sender = load_keypair("/path/to/wallet.json" )?;
+    // Load the sender's keypair using standard Solana SDK method
+    let sender = Keypair::read_from_file("/path/to/wallet.json")
+        .expect("Failed to read wallet file");
     
-    println!("Sender pubkey: {}", sender.pubkey());
+    info!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
     let receiver = Pubkey::from_str("RECIEVER_KEY")?;
@@ -45,9 +56,8 @@ async fn main() -> Result<()> {
 
     // Define amounts to send (in lamports)
     let main_transfer_amount = 1_000; // 0.000001 SOL
-    let jito_tip_amount = 1_000; // 0.000001 SOL
+    let jito_tip_amount = 3_000; // 0.000003 SOL
     let priority_fee_amount = 7_000; // 0.000007 SOL
-
 
     // Create priority fee instruction
     let set_compute_unit_price_ix = ComputeBudgetInstruction::set_compute_unit_price(priority_fee_amount);
@@ -80,7 +90,7 @@ async fn main() -> Result<()> {
     let serialized_tx = general_purpose::STANDARD.encode(bincode::serialize(&transaction)?);
 
     // Send transaction using Jito SDK
-    println!("Sending transaction...");
+    info!("Sending transaction...");
     let params = json!({
         "tx": serialized_tx
     });
@@ -90,17 +100,18 @@ async fn main() -> Result<()> {
     let signature = response["result"]
         .as_str()
         .ok_or_else(|| anyhow!("Failed to get signature from response"))?;
-    println!("Transaction sent with signature: {}", signature);
+    info!("Transaction sent with signature: {}", signature);
 
     // Confirm transaction
+    debug!("Confirming transaction...");
     let confirmation = solana_rpc.confirm_transaction_with_spinner(
         &signature.parse()?,
         &solana_rpc.get_latest_blockhash()?,
         CommitmentConfig::confirmed(),
     )?;
-    println!("Transaction confirmed: {:?}", confirmation);
+    info!("Transaction confirmed: {:?}", confirmation);
 
-    println!("View transaction on Solscan: https://solscan.io/tx/{}", signature);
+    info!("View transaction on Solscan: https://solscan.io/tx/{}", signature);
 
     Ok(())
 }

@@ -1,8 +1,9 @@
+use anyhow::{anyhow, Result};
+use rand::seq::SliceRandom;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::fmt;
-use anyhow::{anyhow, Result};
-use rand::seq::SliceRandom;
+use tracing::{debug, trace};
 
 pub struct JitoJsonRpcSDK {
     base_url: String,
@@ -34,9 +35,14 @@ impl JitoJsonRpcSDK {
         }
     }
 
-    async fn send_request(&self, endpoint: &str, method: &str, params: Option<Value>) -> Result<Value, reqwest::Error> {
+    async fn send_request(
+        &self,
+        endpoint: &str,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<Value, reqwest::Error> {
         let url = format!("{}{}", self.base_url, endpoint);
-        
+
         let data = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -44,10 +50,14 @@ impl JitoJsonRpcSDK {
             "params": params.unwrap_or(json!([]))
         });
 
-        println!("Sending request to: {}", url);
-        println!("Request body: {}", serde_json::to_string_pretty(&data).unwrap());
+        trace!("Sending request to: {}", url);
+        trace!(
+            "Request body: {}",
+            serde_json::to_string_pretty(&data).unwrap()
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .json(&data)
@@ -55,10 +65,13 @@ impl JitoJsonRpcSDK {
             .await?;
 
         let status = response.status();
-        println!("Response status: {}", status);
+        debug!("Response status: {}", status);
 
         let body = response.json::<Value>().await?;
-        println!("Response body: {}", serde_json::to_string_pretty(&body).unwrap());
+        trace!(
+            "Response body: {}",
+            serde_json::to_string_pretty(&body).unwrap()
+        );
 
         Ok(body)
     }
@@ -76,7 +89,7 @@ impl JitoJsonRpcSDK {
     // Get a random tip account
     pub async fn get_random_tip_account(&self) -> Result<String> {
         let tip_accounts_response = self.get_tip_accounts().await?;
-        
+
         let tip_accounts = tip_accounts_response["result"]
             .as_array()
             .ok_or_else(|| anyhow!("Failed to parse tip accounts as array"))?;
@@ -197,5 +210,4 @@ impl JitoJsonRpcSDK {
     pub fn prettify(value: Value) -> PrettyJsonValue {
         PrettyJsonValue(value)
     }
-    
 }
