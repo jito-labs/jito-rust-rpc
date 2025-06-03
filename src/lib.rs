@@ -110,9 +110,9 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
         let endpoint = if let Some(uuid) = &self.uuid {
-            format!("/bundles?uuid={}", uuid)
+            format!("/getBundleStatuses?uuid={}", uuid)
         } else {
-            "/bundles".to_string()
+            "/getBundleStatuses".to_string()
         };
 
         // Construct the params as a list within a list
@@ -194,9 +194,9 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_in_flight_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
         let endpoint = if let Some(uuid) = &self.uuid {
-            format!("/bundles?uuid={}", uuid)
+            format!("/getInflightBundleStatuses?uuid={}", uuid)
         } else {
-            "/bundles".to_string()
+            "/getInflightBundleStatuses".to_string()
         };
 
         let params = json!([bundle_uuids]);

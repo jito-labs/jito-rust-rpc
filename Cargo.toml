@@ -1,6 +1,6 @@
 [package]
 name = "jito-sdk-rust"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["mdr0id <marshall@jito.wtf>"]
 edition = "2021"
 
