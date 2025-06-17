@@ -2,14 +2,14 @@ use anyhow::{anyhow, Result};
 use jito_sdk_rust::JitoJsonRpcSDK;
 use serde_json::json;
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-    signer::EncodableKey,
-    system_instruction,
-    transaction::Transaction,
-};
+
+use solana_instruction::{AccountMeta, Instruction};
+use solana_pubkey::Pubkey;
+use solana_keypair::Keypair;
+use solana_signer::{Signer, EncodableKey};
+use solana_program::system_instruction;
+use solana_transaction::Transaction;
+
 use std::str::FromStr;
 use tokio::time::{sleep, Duration};
 use tracing::{info, debug, warn, error};
@@ -44,26 +44,28 @@ async fn main() -> Result<()> {
     let solana_rpc = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
 
     // Setup client Jito Block Engine endpoint
+    // Option 1: No UUID - pass None directly
     let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", None);
-
-    // Setup client Jito Block Engine endpoint with UUID
-    //let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", "UUID-API-KEY");
+    
+    // Option 2: With UUID - uncomment this instead if you have a UUID
+    // let uuid_string = "your-uuid-here".to_string();
+    // let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", Some(uuid_string));
 
     // Load the sender's keypair using standard Solana SDK method
-    let sender = Keypair::read_from_file("/path/to/wallet.json")
+    let sender = Keypair::read_from_file("/path/to/wallet-keypair.json")
         .expect("Failed to read wallet file");
     info!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
-    let receiver = Pubkey::from_str("RECIEVER_PUBKEY")?;
+    let receiver = Pubkey::from_str("4dmPnKRp3kgN99fMvszGvabHFSE7zdjzniYT6GiTh6cp")?;
     let random_tip_account = jito_sdk.get_random_tip_account().await?;
     let jito_tip_account = Pubkey::from_str(&random_tip_account)?;
 
     // Define amounts to send (in lamports)
     let main_transfer_amount = 1_000; // 0.000001 SOL
-    let jito_tip_amount = 1_000; // 0.000001 SOL
+    let jito_tip_amount = 3_000; // 0.000003 SOL
 
-    // Create instructions
+    // Create transfer instructions using system_instruction from solana-program
     let main_transfer_ix = system_instruction::transfer(
         &sender.pubkey(),
         &receiver,
@@ -93,7 +95,7 @@ async fn main() -> Result<()> {
     let recent_blockhash = solana_rpc.get_latest_blockhash()?;
     transaction.sign(&[&sender], recent_blockhash);
 
-    // Serialize the transaction using base64 instead of base58
+    // Serialize the transaction using base64
     let serialized_tx = general_purpose::STANDARD.encode(bincode::serialize(&transaction)?);
     
     // Prepare bundle for submission (array of transactions)
@@ -107,12 +109,14 @@ async fn main() -> Result<()> {
         }
     ]);
 
-    // UUID for the bundle
-    let uuid = None;
-
     // Send bundle using Jito SDK
     info!("Sending bundle with 1 transaction...");
-    let response = jito_sdk.send_bundle(Some(params), uuid).await?;
+    
+    // Option 1: No UUID for send_bundle - pass None
+    let response = jito_sdk.send_bundle(Some(params), None).await?;
+    
+    // Option 2: With UUID for send_bundle - uncomment this instead if you have a UUID
+    //let response = jito_sdk.send_bundle(Some(params), Some(uuid_string.as_str())).await?;
  
     // Extract bundle UUID from response
     let bundle_uuid = response["result"]
