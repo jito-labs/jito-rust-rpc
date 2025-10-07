@@ -6,8 +6,11 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::fmt;
+use std::fmt::Display;
+use std::sync::Arc;
 use tracing::{debug, trace};
 use rand::prelude::IndexedRandom;
+use crate::JitoRpcErrorObject::RpcError;
 
 #[derive(Clone)]
 pub struct JitoJsonRpcSDK {
@@ -31,6 +34,31 @@ impl From<Value> for PrettyJsonValue {
     }
 }
 
+
+#[derive(Clone, Debug)]
+pub enum JitoRpcErrorObject {
+    HttpError(Arc<reqwest::Error>),
+    RpcError{ code: i64, message: String },
+}
+
+impl From<reqwest::Error> for JitoRpcErrorObject {
+    fn from(err: reqwest::Error) -> Self {
+        JitoRpcErrorObject::HttpError(Arc::new(err))
+    }
+}
+
+impl Display for JitoRpcErrorObject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JitoRpcErrorObject::HttpError(err) => write!(f, "HTTP Error: {}", err),
+            JitoRpcErrorObject::RpcError { code, message } =>  write!(f, "RPC Error {}: {}", code, message),
+        }
+    }
+}
+
+impl std::error::Error for JitoRpcErrorObject {}
+
+
 impl JitoJsonRpcSDK {
     pub fn new(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
         Self {
@@ -45,7 +73,7 @@ impl JitoJsonRpcSDK {
         endpoint: &str,
         method: &str,
         params: Option<Value>,
-    ) -> Result<Value, reqwest::Error> {
+    ) -> Result<Value, JitoRpcErrorObject> {
         let url = format!("{}{}", self.base_url, endpoint);
 
         let data = json!({
@@ -73,15 +101,34 @@ impl JitoJsonRpcSDK {
         debug!("Response status: {}", status);
 
         let body = response.json::<Value>().await?;
-        trace!(
-            "Response body: {}",
-            serde_json::to_string_pretty(&body).unwrap()
-        );
+        if tracing::level_enabled!(tracing::Level::TRACE) {
+            trace!(
+                "Raw response body: {}",
+                serde_json::to_string_pretty(&body).unwrap()
+            );
+        }
+
+        // handle error independently of http status code
+        if body["error"].is_object() {
+            let error_object = body["error"].as_object().unwrap();
+            if let (Some(code), Some(message)) = (error_object.get("code"), error_object.get("message")) {
+                let code: Option<i64> = code.as_i64();
+                let message: Option<&str> = message.as_str();
+                // note: we assume that
+                trace!("Error code: {:?}, message: {:?}", code, message);
+
+                return Err(RpcError {
+                    code: code.unwrap_or_default(),
+                    message: message.unwrap_or_default().to_string(),
+                })
+            }
+
+        }
 
         Ok(body)
     }
 
-    pub async fn get_tip_accounts(&self) -> Result<Value, reqwest::Error> {
+    pub async fn get_tip_accounts(&self) -> Result<Value, JitoRpcErrorObject>{
         let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
             format!("/bundles?uuid={}", uuid)
         } else {
@@ -185,7 +232,7 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    pub async fn send_txn(&self, params: Option<Value>, bundle_only: bool) -> Result<Value, reqwest::Error> {
+    pub async fn send_txn(&self, params: Option<Value>, bundle_only: bool) -> Result<Value, JitoRpcErrorObject> {
         let mut query_params = Vec::new();
 
         if bundle_only {

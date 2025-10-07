@@ -3,7 +3,7 @@ use base64::Engine;
 use base64::engine::general_purpose;
 use serde_json::{json, Value};
 use solana_transaction::Transaction;
-use crate::JitoJsonRpcSDK;
+use crate::{JitoJsonRpcSDK, JitoRpcErrorObject};
 
 impl JitoJsonRpcSDK {
 
