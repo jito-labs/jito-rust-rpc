@@ -1,5 +1,5 @@
 
-#[cfg(feature = "transactions")]
+#[cfg(feature = "use-solana-types")]
 pub mod solana_types;
 
 use anyhow::{anyhow, Result};

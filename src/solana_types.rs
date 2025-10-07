@@ -7,7 +7,7 @@ use crate::JitoJsonRpcSDK;
 
 impl JitoJsonRpcSDK {
 
-    pub async fn send_bundle_of_transactions(&self, transactions: Vec<Transaction>) -> anyhow::Result<Value, anyhow::Error> {
+    pub async fn send_bundle_of_transactions(&self, transactions: &[Transaction]) -> anyhow::Result<Value, anyhow::Error> {
         let txlist_encoded = convert_transactions_to_base64(transactions)?;
 
         let mut endpoint = "/bundles".to_string();
@@ -31,7 +31,7 @@ impl JitoJsonRpcSDK {
 }
 
 
-fn convert_transactions_to_base64(transactions: Vec<Transaction>) -> anyhow::Result<Vec<String>, anyhow::Error> {
+fn convert_transactions_to_base64(transactions: &[Transaction]) -> anyhow::Result<Vec<String>, anyhow::Error> {
     let mapped: Vec<Option<Vec<u8>>> = transactions.iter()
         .map(|tx| bincode::serialize(tx).ok())
         .collect();

@@ -8,6 +8,7 @@
 The Jito JSON-RPC Rust SDK provides an interface for interacting with Jito's enhanced Solana infrastructure. This SDK supports methods for managing bundles and transactions, offering improved performance and additional features while interacting with the Block Engine.
 
 ## Features
+* `use-solana-types` allowing the use of Solana's native type `Transaction`.
 
 ### Bundles
 - `getInflightBundleStatuses`: Retrieve the status of in-flight bundles.
