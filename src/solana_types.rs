@@ -2,12 +2,12 @@ use anyhow::{anyhow, bail};
 use base64::Engine;
 use base64::engine::general_purpose;
 use serde_json::{json, Value};
-use solana_transaction::Transaction;
+use solana_transaction::versioned::VersionedTransaction;
 use crate::{JitoJsonRpcSDK};
 
 impl JitoJsonRpcSDK {
 
-    pub async fn send_bundle_of_transactions(&self, transactions: &[Transaction]) -> anyhow::Result<Value, anyhow::Error> {
+    pub async fn send_bundle_of_transactions(&self, transactions: &[VersionedTransaction]) -> anyhow::Result<Value, anyhow::Error> {
         let txlist_encoded = convert_transactions_to_base64(transactions)?;
 
         let mut endpoint = "/bundles".to_string();
@@ -31,7 +31,7 @@ impl JitoJsonRpcSDK {
 }
 
 
-fn convert_transactions_to_base64(transactions: &[Transaction]) -> anyhow::Result<Vec<String>, anyhow::Error> {
+fn convert_transactions_to_base64(transactions: &[VersionedTransaction]) -> anyhow::Result<Vec<String>, anyhow::Error> {
     let mapped: Vec<Option<Vec<u8>>> = transactions.iter()
         .map(|tx| (bincode::serialize(tx).ok()))
         .collect();
@@ -43,7 +43,7 @@ fn convert_transactions_to_base64(transactions: &[Transaction]) -> anyhow::Resul
     if !failed_idx.is_empty() {
         bail!("Failed to serialize transactions at indices: {:?}", failed_idx);
     }
-
+c
     let base64: Vec<String> = mapped.iter().flatten()
         .map(|b| general_purpose::STANDARD.encode(b))
         .collect();
