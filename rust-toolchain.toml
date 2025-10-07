@@ -1,6 +1,6 @@
 [toolchain]
 # sync with solana version 3.0.1
 channel = "1.86.0"
-components = ["clippy", "rustfmt"]
+components = ["clippy"]
 targets = []
 profile = "minimal"
