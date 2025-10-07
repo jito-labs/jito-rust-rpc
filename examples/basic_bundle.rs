@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
 
     // Setup client Jito Block Engine endpoint
     // Option 1: No UUID - pass None directly
-    let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", None);
+    let jito_sdk = JitoJsonRpcSDK::new_plain_url("https://mainnet.block-engine.jito.wtf", None);
     
     // Option 2: With UUID - uncomment this instead if you have a UUID
     // let uuid_string = "your-uuid-here".to_string();

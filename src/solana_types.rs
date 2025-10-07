@@ -10,7 +10,7 @@ impl JitoJsonRpcSDK {
     pub async fn send_bundle_of_transactions(&self, transactions: &[VersionedTransaction]) -> anyhow::Result<Value, anyhow::Error> {
         let txlist_encoded = convert_transactions_to_base64(transactions)?;
 
-        let mut endpoint = "/bundles".to_string();
+        let mut endpoint = "/api/v1/bundles".to_string();
 
         if let Some(uuid) = self.jito_auth_uuid.as_deref() {
             endpoint = format!("{}?uuid={}", endpoint, uuid);

@@ -60,7 +60,10 @@ impl std::error::Error for JitoRpcErrorObject {}
 
 
 impl JitoJsonRpcSDK {
-    pub fn new(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
+    /// base_url example: "https://mainnet.block-engine.jito.wtf"
+    pub fn new_plain_url(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
+        assert!(!base_url.ends_with("/api/v1"), "Base URL must NOT include the version");
+        assert!(!base_url.ends_with("/"), "Base URL must NOT end ith slash");
         Self {
             base_url: base_url.to_string(),
             jito_auth_uuid,
@@ -132,9 +135,9 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_tip_accounts(&self) -> Result<Value, JitoRpcErrorObject>{
         let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
-            format!("/bundles?uuid={}", uuid)
+            format!("/api/v1/bundles?uuid={}", uuid)
         } else {
-            "/bundles".to_string()
+            "/api/v1/bundles".to_string()
         };
 
         self.send_request(&endpoint, "getTipAccounts", None).await
@@ -164,9 +167,9 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
         let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
-            format!("/getBundleStatuses?uuid={}", uuid)
+            format!("/api/v1/getBundleStatuses?uuid={}", uuid)
         } else {
-            "/getBundleStatuses".to_string()
+            "/api/v1/getBundleStatuses".to_string()
         };
 
         // Construct the params as a list within a list
@@ -178,7 +181,7 @@ impl JitoJsonRpcSDK {
     }
 
     pub async fn send_bundle_base64(&self, txlist_encoded: Vec<String>) -> Result<Value, anyhow::Error> {
-        let mut endpoint = "/bundles".to_string();
+        let mut endpoint = "/api/v1/bundles".to_string();
 
         if let Some(uuid) = self.jito_auth_uuid.as_deref() {
             endpoint = format!("{}?uuid={}", endpoint, uuid);
@@ -197,7 +200,7 @@ impl JitoJsonRpcSDK {
     }
 
     pub async fn send_bundle(&self, params: Option<Value>, jito_auth_uuid: Option<&str>) -> Result<Value, anyhow::Error> {
-        let mut endpoint = "/bundles".to_string();
+        let mut endpoint = "/api/v1/bundles".to_string();
         
         if let Some(uuid) = jito_auth_uuid {
             endpoint = format!("{}?uuid={}", endpoint, uuid);
@@ -242,9 +245,9 @@ impl JitoJsonRpcSDK {
         }
 
         let endpoint = if query_params.is_empty() {
-            "/transactions".to_string()
+            "/api/v1/transactions".to_string()
         } else {
-            format!("/transactions?{}", query_params.join("&"))
+            format!("/api/v1/transactions?{}", query_params.join("&"))
         };
 
         let params = match params {
@@ -267,9 +270,9 @@ impl JitoJsonRpcSDK {
 
     pub async fn get_in_flight_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
         let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
-            format!("/getInflightBundleStatuses?uuid={}", uuid)
+            format!("/api/v1/getInflightBundleStatuses?uuid={}", uuid)
         } else {
-            "/getInflightBundleStatuses".to_string()
+            "/api/v1/getInflightBundleStatuses".to_string()
         };
 
         let params = json!([bundle_uuids]);

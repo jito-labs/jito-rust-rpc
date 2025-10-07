@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing();
 
     // Example with no UUID (default)
-    let sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", None);
+    let sdk = JitoJsonRpcSDK::new_plain_url("https://mainnet.block-engine.jito.wtf", None);
 
     // Example with UUID (for rate limit approved)
     // let uuid_string = "your-uuid-here".to_string();
