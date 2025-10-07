@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use rand::seq::SliceRandom;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::fmt;
@@ -101,7 +100,7 @@ impl JitoJsonRpcSDK {
         }
 
         let random_account = tip_accounts
-            .choose(&mut rand::thread_rng())
+            .choose(&mut rand::rng())
             .ok_or_else(|| anyhow!("Failed to choose random tip account"))?;
 
         random_account

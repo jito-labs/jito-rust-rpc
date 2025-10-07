@@ -16,10 +16,6 @@ use tokio::time::{sleep, Duration};
 use tracing::{info, debug, warn, error};
 use tracing_subscriber::EnvFilter;
 use base64::{Engine as _, engine::general_purpose};
-use rand::Rng;
-use rand::seq::SliceRandom;
-// use solana_compute_budget_interface::ComputeBudgetInstruction;
-// use solana_program::native_token::sol_to_lamports;
 use rand::prelude::IndexedRandom;
 use solana_compute_budget_interface::ComputeBudgetInstruction;
 use solana_rpc_client::rpc_client::{RpcClient, SerializableTransaction};
@@ -319,7 +315,7 @@ fn print_transaction_url(bundle_status: &BundleStatus) {
 }
 
 fn get_random_tip_account() -> String {
-    JITO_TIP.choose(&mut rand::thread_rng()).expect("must find one").to_string()
+    JITO_TIP.choose(&mut rand::rng()).expect("must find one").to_string()
 }
 
 pub const JITO_TIP: [&str; 8] = [
