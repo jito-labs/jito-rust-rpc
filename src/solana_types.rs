@@ -3,7 +3,7 @@ use base64::Engine;
 use base64::engine::general_purpose;
 use serde_json::{json, Value};
 use solana_transaction::Transaction;
-use crate::{JitoJsonRpcSDK, JitoRpcErrorObject};
+use crate::{JitoJsonRpcSDK};
 
 impl JitoJsonRpcSDK {
 
@@ -33,11 +33,15 @@ impl JitoJsonRpcSDK {
 
 fn convert_transactions_to_base64(transactions: &[Transaction]) -> anyhow::Result<Vec<String>, anyhow::Error> {
     let mapped: Vec<Option<Vec<u8>>> = transactions.iter()
-        .map(|tx| bincode::serialize(tx).ok())
+        .map(|tx| (bincode::serialize(tx).ok()))
         .collect();
 
-    if mapped.iter().any(|opt| opt.is_none()) {
-        bail!("Failed to serialize one or more transactions");
+    let failed_idx: Vec<usize> = mapped.iter().enumerate()
+        .filter(|(_, opt)| opt.is_none())
+        .map(| (i, _)| i).collect();
+
+    if !failed_idx.is_empty() {
+        bail!("Failed to serialize transactions at indices: {:?}", failed_idx);
     }
 
     let base64: Vec<String> = mapped.iter().flatten()

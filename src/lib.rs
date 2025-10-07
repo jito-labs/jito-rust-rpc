@@ -3,7 +3,7 @@
 pub mod solana_types;
 
 use anyhow::{anyhow, Result};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::fmt;
 use std::fmt::Display;
@@ -38,7 +38,7 @@ impl From<Value> for PrettyJsonValue {
 #[derive(Clone, Debug)]
 pub enum JitoRpcErrorObject {
     HttpError(Arc<reqwest::Error>),
-    RpcError{ code: i64, message: String },
+    RpcError{ code: i64, message: String, http_status: StatusCode },
 }
 
 impl From<reqwest::Error> for JitoRpcErrorObject {
@@ -51,7 +51,7 @@ impl Display for JitoRpcErrorObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             JitoRpcErrorObject::HttpError(err) => write!(f, "HTTP Error: {}", err),
-            JitoRpcErrorObject::RpcError { code, message } =>  write!(f, "RPC Error {}: {}", code, message),
+            JitoRpcErrorObject::RpcError { code, message, http_status } =>  write!(f, "RPC Error {}: {} (http status {})", code, message, http_status),
         }
     }
 }
@@ -114,12 +114,14 @@ impl JitoJsonRpcSDK {
             if let (Some(code), Some(message)) = (error_object.get("code"), error_object.get("message")) {
                 let code: Option<i64> = code.as_i64();
                 let message: Option<&str> = message.as_str();
+                let http_status = status;
                 // note: we assume that
-                trace!("Error code: {:?}, message: {:?}", code, message);
+                trace!("Error code: {:?}, message: {:?}, http status: {}", code, message, http_status);
 
                 return Err(RpcError {
                     code: code.unwrap_or_default(),
                     message: message.unwrap_or_default().to_string(),
+                    http_status,
                 })
             }
 
