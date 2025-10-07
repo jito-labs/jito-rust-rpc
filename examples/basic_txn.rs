@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
     });
     let response = jito_sdk.send_txn(Some(params), false).await?;
 
-    // Extract signature from response
+    // Extract signature from responseg
     let signature = response["result"]
         .as_str()
         .ok_or_else(|| anyhow!("Failed to get signature from response"))?;

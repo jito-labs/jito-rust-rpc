@@ -1,6 +1,6 @@
 [package]
 name = "jito-sdk-rust"
-version = "0.3.2"
+version = "0.4.0"
 authors = ["mdr0id <marshall@jito.wtf>"]
 edition = "2021"
 
@@ -30,6 +30,5 @@ solana-pubkey = { version = "~3.0", default-features = false }
 solana-transaction = { version = "~3.0", default-features = false }
 solana-compute-budget-interface = "~3.0"
 solana-system-interface = { version = "2.0", features = ["bincode"] }
-# TODO remove
 solana-rpc-client = { version = "~3.0", default-features = false }
 solana-rpc-client-api = { version = "~3.0" }
