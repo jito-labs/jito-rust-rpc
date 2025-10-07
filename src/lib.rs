@@ -61,7 +61,7 @@ impl std::error::Error for JitoRpcErrorObject {}
 
 impl JitoJsonRpcSDK {
     /// base_url example: "https://mainnet.block-engine.jito.wtf"
-    pub fn new_plain_url(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
+    pub fn new_with_base_url(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
         assert!(!base_url.ends_with("/api/v1"), "Base URL must NOT include the version");
         assert!(!base_url.ends_with("/"), "Base URL must NOT end ith slash");
         Self {

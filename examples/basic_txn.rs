@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
     // Setup client Jito Block Engine endpoint with UUID
     //let uuid_string = "your-UUID-string".to_string();
     let uuid_string =  None;
-    let jito_sdk = JitoJsonRpcSDK::new_plain_url("https://mainnet.block-engine.jito.wtf", uuid_string);
+    let jito_sdk = JitoJsonRpcSDK::new_with_base_url("https://mainnet.block-engine.jito.wtf", uuid_string);
     
     // Load the sender's keypair - UPDATE THIS PATH to your actual wallet file
     // Common paths:
