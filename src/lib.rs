@@ -5,7 +5,7 @@ use std::fmt;
 use tracing::{debug, trace};
 use rand::prelude::IndexedRandom;
 
-
+#[derive(Clone)]
 pub struct JitoJsonRpcSDK {
     base_url: String,
     uuid: Option<String>,
