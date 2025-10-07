@@ -1,3 +1,7 @@
+
+#[cfg(feature = "transactions")]
+pub mod solana_types;
+
 use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -8,7 +12,7 @@ use rand::prelude::IndexedRandom;
 #[derive(Clone)]
 pub struct JitoJsonRpcSDK {
     base_url: String,
-    uuid: Option<String>,
+    jito_auth_uuid: Option<String>,
     client: Client,
 }
 
@@ -28,10 +32,10 @@ impl From<Value> for PrettyJsonValue {
 }
 
 impl JitoJsonRpcSDK {
-    pub fn new(base_url: &str, uuid: Option<String>) -> Self {
+    pub fn new(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
         Self {
             base_url: base_url.to_string(),
-            uuid,
+            jito_auth_uuid,
             client: Client::new(),
         }
     }
@@ -78,7 +82,7 @@ impl JitoJsonRpcSDK {
     }
 
     pub async fn get_tip_accounts(&self) -> Result<Value, reqwest::Error> {
-        let endpoint = if let Some(uuid) = &self.uuid {
+        let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
             format!("/bundles?uuid={}", uuid)
         } else {
             "/bundles".to_string()
@@ -110,7 +114,7 @@ impl JitoJsonRpcSDK {
     }
 
     pub async fn get_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
-        let endpoint = if let Some(uuid) = &self.uuid {
+        let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
             format!("/getBundleStatuses?uuid={}", uuid)
         } else {
             "/getBundleStatuses".to_string()
@@ -124,10 +128,29 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    pub async fn send_bundle(&self, params: Option<Value>, uuid: Option<&str>) -> Result<Value, anyhow::Error> {
+    pub async fn send_bundle_base64(&self, txlist_encoded: Vec<String>) -> Result<Value, anyhow::Error> {
+        let mut endpoint = "/bundles".to_string();
+
+        if let Some(uuid) = self.jito_auth_uuid.as_deref() {
+            endpoint = format!("{}?uuid={}", endpoint, uuid);
+        }
+
+        let request_params = json!([
+            txlist_encoded,
+            {
+                "encoding": "base64"
+            }
+        ]);
+
+        self.send_request(&endpoint, "sendBundle", Some(request_params))
+            .await
+            .map_err(|e| anyhow!("Request error: {}", e))
+    }
+
+    pub async fn send_bundle(&self, params: Option<Value>, jito_auth_uuid: Option<&str>) -> Result<Value, anyhow::Error> {
         let mut endpoint = "/bundles".to_string();
         
-        if let Some(uuid) = uuid {
+        if let Some(uuid) = jito_auth_uuid {
             endpoint = format!("{}?uuid={}", endpoint, uuid);
         }
     
@@ -194,7 +217,7 @@ impl JitoJsonRpcSDK {
     }
 
     pub async fn get_in_flight_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
-        let endpoint = if let Some(uuid) = &self.uuid {
+        let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
             format!("/getInflightBundleStatuses?uuid={}", uuid)
         } else {
             "/getInflightBundleStatuses".to_string()
