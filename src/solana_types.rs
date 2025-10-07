@@ -43,7 +43,7 @@ fn convert_transactions_to_base64(transactions: &[VersionedTransaction]) -> anyh
     if !failed_idx.is_empty() {
         bail!("Failed to serialize transactions at indices: {:?}", failed_idx);
     }
-c
+
     let base64: Vec<String> = mapped.iter().flatten()
         .map(|b| general_purpose::STANDARD.encode(b))
         .collect();
