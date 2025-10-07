@@ -1,17 +1,14 @@
 use anyhow::{Result, anyhow};
 use jito_sdk_rust::JitoJsonRpcSDK;
-use solana_client::rpc_client::RpcClient;
 
 use solana_pubkey::Pubkey;
-use solana_keypair::Keypair;
-use solana_signer::{Signer, EncodableKey};
-use solana_program::system_instruction;
-use solana_transaction::Transaction;
-use solana_instruction::Instruction;
+use solana_keypair::{EncodableKey, Keypair, Signer};
+use solana_transaction::{Instruction, Transaction};
 
 use base64::{Engine as _, engine::general_purpose};
 use std::str::FromStr;
 use serde_json::json;
+use solana_rpc_client::rpc_client::RpcClient;
 use tracing::{info, debug};
 use tracing_subscriber::EnvFilter;
 
@@ -92,12 +89,12 @@ async fn main() -> Result<()> {
     );
 
     // Create transfer instructions - system_instruction is in solana-program
-    let main_transfer_ix = system_instruction::transfer(
+    let main_transfer_ix = solana_system_interface::instruction::transfer(
         &sender.pubkey(),
         &receiver,
         main_transfer_amount,
     );
-    let jito_tip_ix = system_instruction::transfer(
+    let jito_tip_ix = solana_system_interface::instruction::transfer(
         &sender.pubkey(),
         &jito_tip_account,
         jito_tip_amount,

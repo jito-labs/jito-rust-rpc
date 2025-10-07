@@ -1,9 +1,14 @@
+use std::env;
 use anyhow::{anyhow, Result};
 use jito_sdk_rust::JitoJsonRpcSDK;
 use serde_json::json;
+// use solana_client::rpc_client::{RpcClient, SerializableTransaction};
 
+// use solana_instruction::{AccountMeta, Instruction};
 use solana_pubkey::Pubkey;
 use solana_keypair::{EncodableKey, Keypair, Signer};
+// use solana_signer::{Signer, EncodableKey};
+// use solana_program::system_instruction;
 use solana_transaction::{AccountMeta, Instruction, Transaction};
 
 use std::str::FromStr;
@@ -11,7 +16,13 @@ use tokio::time::{sleep, Duration};
 use tracing::{info, debug, warn, error};
 use tracing_subscriber::EnvFilter;
 use base64::{Engine as _, engine::general_purpose};
-use solana_rpc_client::rpc_client::RpcClient;
+use rand::Rng;
+use rand::seq::SliceRandom;
+// use solana_compute_budget_interface::ComputeBudgetInstruction;
+// use solana_program::native_token::sol_to_lamports;
+use rand::prelude::IndexedRandom;
+use solana_compute_budget_interface::ComputeBudgetInstruction;
+use solana_rpc_client::rpc_client::{RpcClient, SerializableTransaction};
 
 #[derive(Debug)]
 struct BundleStatus {
@@ -42,21 +53,24 @@ async fn main() -> Result<()> {
 
     // Setup client Jito Block Engine endpoint
     // Option 1: No UUID - pass None directly
-    let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", None);
-    
+    // let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", None);
+
     // Option 2: With UUID - uncomment this instead if you have a UUID
-    // let uuid_string = "your-uuid-here".to_string();
-    // let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", Some(uuid_string));
+    let uuid_string = env::var("JITO_UUID").expect("JITO_UUID must be set in env");
+    let jito_sdk = JitoJsonRpcSDK::new("https://mainnet.block-engine.jito.wtf/api/v1", Some(uuid_string.clone()));
 
     // Load the sender's keypair using standard Solana SDK method
-    let sender = Keypair::read_from_file("/path/to/wallet-keypair.json")
+    let sender = Keypair::read_from_file("/Users/stefan/mango/solana-wallet/wallet-jup-mainnet-test.json")
         .expect("Failed to read wallet file");
     info!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver and Jito tip account
-    let receiver = Pubkey::from_str("4dmPnKRp3kgN99fMvszGvabHFSE7zdjzniYT6GiTh6cp")?;
-    let random_tip_account = jito_sdk.get_random_tip_account().await?;
+    let receiver = Pubkey::from_str("ENysnWXFmvqZoeATS1kRwk9JViiNwJM1fdKgrMpZ5TWV")?;
+    // let random_tip_account = jito_sdk.get_random_tip_account().await?;
+    // let random_tip_account = get_random_tip_account_sandy();
+    let random_tip_account = get_random_tip_account();
     let jito_tip_account = Pubkey::from_str(&random_tip_account)?;
+    println!("Using Jito tip account: {}", jito_tip_account);
 
     // Define amounts to send (in lamports)
     let main_transfer_amount = 1_000; // 0.000001 SOL
@@ -76,28 +90,61 @@ async fn main() -> Result<()> {
 
     // Create memo instruction
     let memo_program_id = Pubkey::from_str("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")?;
-    let memo_ix = Instruction::new_with_bytes(
+    let memo_ix1 = Instruction::new_with_bytes(
         memo_program_id,
-        b"hello world jito bundle",
+        b"hello world memo 1",
+        vec![AccountMeta::new(sender.pubkey(), true)],
+    );
+    let memo_ix2 = Instruction::new_with_bytes(
+        memo_program_id,
+        b"hello world memo 2",
         vec![AccountMeta::new(sender.pubkey(), true)],
     );
 
-    // Create a transaction
-    let mut transaction = Transaction::new_with_payer(
-        &[main_transfer_ix, memo_ix, jito_tip_ix],
+
+
+
+    // Create 2 transactions
+    let mut transaction1 = Transaction::new_with_payer(
+        &[main_transfer_ix.clone(), memo_ix1],
+        Some(&sender.pubkey()),
+    );
+
+    let mut transaction2 = Transaction::new_with_payer(
+        &[main_transfer_ix.clone(), memo_ix2],
+        Some(&sender.pubkey()),
+    );
+
+
+    // Create tip transaction
+    let mut tip_transaction = Transaction::new_with_payer(
+        &[jito_tip_ix],
         Some(&sender.pubkey()),
     );
 
     // Get recent blockhash
     let recent_blockhash = solana_rpc.get_latest_blockhash()?;
-    transaction.sign(&[&sender], recent_blockhash);
+    transaction1.sign(&[&sender], recent_blockhash);
+    transaction2.sign(&[&sender], recent_blockhash);
+    tip_transaction.sign(&[&sender], recent_blockhash);
 
-    // Serialize the transaction using base64
-    let serialized_tx = general_purpose::STANDARD.encode(bincode::serialize(&transaction)?);
-    
+    info!("Transaction 1 signature: {}", transaction1.get_signature());
+    info!("Transaction 2 signature: {}", transaction2.get_signature());
+
     // Prepare bundle for submission (array of transactions)
-    let transactions = json!([serialized_tx]);
-    
+    let transactions = json!([
+        general_purpose::STANDARD.encode(bincode::serialize(&transaction1)?),
+        general_purpose::STANDARD.encode(bincode::serialize(&transaction2)?),
+        general_purpose::STANDARD.encode(bincode::serialize(&tip_transaction)?),
+    ]);
+
+    // let fixed1 = "AVF07by1vekbjvdgjj25gN9fSB3+kbdzIZMJwQXOMPJcszyFl1KKbKPiZKaMBUWkaTmFWnfEgCnwW9nz3CVFLwMBAAIDxslvvOMSzHxOG2OUuIwsVQg4bH02A03gKW3qc54wOdYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKU1qZKSEGTSTocWDaOHx8NbXdvJK7geQfqEBBBUSNgwVSWwG6TXNEVblW7biOrfMBovIw9l4Rv3ru9rblG4QCAQIAAAwCAAAA6AMAAAAAAAACAQAXaGVsbG8gd29ybGQgaml0byBidW5kbGU=";
+    // let fixed2 = "AQHWCfDwdSoa1EFv5BgVcWKf/aqfxDSPSCDTTkrPne28mMjFUM0hD3KipTlgF5NexqBna5BxfN4lxM4cAeSgKgABAAEDxslvvOMSzHxOG2OUuIwsVQg4bH02A03gKW3qc54wOdZ4Uhyxec67hYm1VqLV7JTSSYaC/fm7KvWtZOSRzEFT2gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgwVSWwG6TXNEVblW7biOrfMBovIw9l4Rv3ru9rblG4QBAgIAAQwCAAAAuAsAAAAAAAA=";
+    // let transactions = json!([
+    //     fixed1,
+    //     fixed2,
+    // ]);
+
     // Create parameters with encoding specification
     let params = json!([
         transactions,
@@ -106,15 +153,14 @@ async fn main() -> Result<()> {
         }
     ]);
 
-    // Send bundle using Jito SDK
-    info!("Sending bundle with 1 transaction...");
-    
     // Option 1: No UUID for send_bundle - pass None
-    let response = jito_sdk.send_bundle(Some(params), None).await?;
+    // let response = jito_sdk.send_bundle(Some(params), None).await?;
     
     // Option 2: With UUID for send_bundle - uncomment this instead if you have a UUID
-    //let response = jito_sdk.send_bundle(Some(params), Some(uuid_string.as_str())).await?;
- 
+    let response = jito_sdk.send_bundle(Some(params), Some(uuid_string.as_str())).await?;
+
+    debug!("Send bundle response: {:#}", response);
+
     // Extract bundle UUID from response
     let bundle_uuid = response["result"]
         .as_str()
@@ -269,5 +315,74 @@ fn print_transaction_url(bundle_status: &BundleStatus) {
         }
     } else {
         warn!("No transactions found in the bundle status.");
+    }
+}
+
+fn get_random_tip_account() -> String {
+    JITO_TIP.choose(&mut rand::thread_rng()).expect("must find one").to_string()
+}
+
+pub const JITO_TIP: [&str; 8] = [
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
+    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
+    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
+    "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+    "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
+];
+
+pub const JITO_MIN_TIP: f64 = 0.000001;
+
+
+#[derive(Debug, Clone)]
+pub struct Tips {
+    pub tip_sol_amount: f64,
+    pub tip_addr_idx: u8,
+    pub cu: Option<u64>,
+    pub priority_fee_micro_lamport: Option<u64>,
+    pub payer: Pubkey,
+    // pub pure_ix: Vec<Instruction>,
+}
+
+pub fn add_tip_ix(pure_ix: Vec<Instruction>, tip_config: Tips) -> Vec<Instruction> {
+    let mut ixs: Vec<Instruction> = Vec::new();
+
+    if let Some(cu) = tip_config.cu {
+        ixs.push(ComputeBudgetInstruction::set_compute_unit_limit(cu as u32));
+    };
+
+    if let Some(priority_fee_micro_lamport) = tip_config.priority_fee_micro_lamport {
+        ixs.push(ComputeBudgetInstruction::set_compute_unit_price(
+            priority_fee_micro_lamport,
+        ));
+    };
+
+    ixs.extend(pure_ix.clone());
+
+    let relayer_fee = tip_config.tip_sol_amount.max(JITO_MIN_TIP); // use `.max()` for clarity
+
+    let recipient = Pubkey::from_str_const(JITO_TIP[tip_config.tip_addr_idx as usize]);
+    let transfer_ix = solana_system_interface::instruction::transfer(
+        &tip_config.payer,
+        &recipient,
+        sol_to_lamports(relayer_fee),
+    );
+    ixs.push(transfer_ix);
+
+    ixs
+}
+
+fn sol_to_lamports(amount_sol: f64) -> u64 {
+    const NATIVE_SOL_DECIMALS: f64 = 1e9;
+    (amount_sol * NATIVE_SOL_DECIMALS) as u64
+}
+
+#[test]
+fn test_many() {
+    for _ in 0..10000 {
+        let tip_account = get_random_tip_account();
+        println!("Random tip account: {}", tip_account);
     }
 }

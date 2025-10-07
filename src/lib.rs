@@ -4,6 +4,8 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use std::fmt;
 use tracing::{debug, trace};
+use rand::prelude::IndexedRandom;
+
 
 pub struct JitoJsonRpcSDK {
     base_url: String,
@@ -211,3 +213,4 @@ impl JitoJsonRpcSDK {
         PrettyJsonValue(value)
     }
 }
+
