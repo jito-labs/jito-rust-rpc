@@ -1,15 +1,15 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use jito_sdk_rust::JitoJsonRpcSDK;
 
-use solana_pubkey::Pubkey;
 use solana_keypair::{EncodableKey, Keypair, Signer};
+use solana_pubkey::Pubkey;
 use solana_transaction::{Instruction, Transaction};
 
-use base64::{Engine as _, engine::general_purpose};
-use std::str::FromStr;
+use base64::{engine::general_purpose, Engine as _};
 use serde_json::json;
 use solana_rpc_client::rpc_client::RpcClient;
-use tracing::{info, debug};
+use std::str::FromStr;
+use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
 fn init_tracing() {
@@ -18,8 +18,7 @@ fn init_tracing() {
     // Use RUST_LOG=off to disable logging entirely
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info"))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 }
@@ -37,37 +36,40 @@ async fn main() -> Result<()> {
 
     // Setup client Jito Block Engine endpoint with UUID
     //let uuid_string = "your-UUID-string".to_string();
-    let uuid_string =  None;
-    let jito_sdk = JitoJsonRpcSDK::new_with_base_url("https://mainnet.block-engine.jito.wtf", uuid_string);
-    
+    let uuid_string = None;
+    let jito_sdk =
+        JitoJsonRpcSDK::new_with_base_url("https://mainnet.block-engine.jito.wtf", uuid_string);
+
     // Load the sender's keypair - UPDATE THIS PATH to your actual wallet file
     // Common paths:
-    // - Linux/Mac: "/home/username/.config/solana/id.json" 
+    // - Linux/Mac: "/home/username/.config/solana/id.json"
     // - Or generate a test keypair: `solana-keygen new --outfile ./test-keypair.json`
-    let wallet_path = std::env::var("/path/to/wallet-keypair.json")
-        .unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            format!("{}/.config/solana/id.json", home)
-        });
-    
-    let sender = Keypair::read_from_file(&wallet_path)
-        .map_err(|e| anyhow!(
+    let wallet_path = std::env::var("/path/to/wallet-keypair.json").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        format!("{}/.config/solana/id.json", home)
+    });
+
+    let sender = Keypair::read_from_file(&wallet_path).map_err(|e| {
+        anyhow!(
             "Failed to read wallet file from '{}'. \n\
              Please either:\n\
              1. Generate a test keypair: solana-keygen new --outfile ./test-keypair.json\n\
              2. Set WALLET_PATH environment variable: export WALLET_PATH=./test-keypair.json\n\
              3. Use your existing Solana CLI keypair at ~/.config/solana/id.json\n\
-             Error: {}", wallet_path, e
-        ))?;
-    
+             Error: {}",
+            wallet_path,
+            e
+        )
+    })?;
+
     info!("Sender pubkey: {}", sender.pubkey());
 
     // Set up receiver - UPDATE THIS to your actual recipient address
     let receiver = Pubkey::from_str(
         &std::env::var("RECIEVER_PUBKEY")
-            .unwrap_or_else(|_| "11111111111111111111111111111112".to_string()) // System Program as default
+            .unwrap_or_else(|_| "11111111111111111111111111111112".to_string()), // System Program as default
     )?;
-    
+
     // Get Jito tip account
     let random_tip_account = jito_sdk.get_random_tip_account().await?;
     let jito_tip_account = Pubkey::from_str(&random_tip_account)?;
@@ -78,15 +80,13 @@ async fn main() -> Result<()> {
     let priority_fee_amount: u64 = 700_000; // 0.000007 SOL in micro-lamports
 
     // SetComputeUnitPrice instruction: discriminator (3) + u64 value
-    let compute_budget_program_id = Pubkey::from_str("ComputeBudget111111111111111111111111111111")?;
+    let compute_budget_program_id =
+        Pubkey::from_str("ComputeBudget111111111111111111111111111111")?;
     let mut instruction_data = vec![3u8]; // SetComputeUnitPrice discriminator
     instruction_data.extend_from_slice(&priority_fee_amount.to_le_bytes());
-    
-    let set_compute_unit_price_ix = Instruction::new_with_bytes(
-        compute_budget_program_id,
-        &instruction_data,
-        vec![],
-    );
+
+    let set_compute_unit_price_ix =
+        Instruction::new_with_bytes(compute_budget_program_id, &instruction_data, vec![]);
 
     // Create transfer instructions - system_instruction is in solana-program
     let main_transfer_ix = solana_system_interface::instruction::transfer(
@@ -130,37 +130,47 @@ async fn main() -> Result<()> {
 
     // Confirm transaction using standard transaction confirmation (not bundle confirmation)
     debug!("Confirming transaction...");
-    
+
     // Parse signature string to Signature type
-    let signature_obj = signature.parse()
+    let signature_obj = signature
+        .parse()
         .map_err(|e| anyhow!("Failed to parse signature: {}", e))?;
-    
+
     // Standard transaction confirmation approach
     let max_retries = 30;
     let mut confirmed = false;
-    
+
     for attempt in 1..=max_retries {
         match solana_rpc.get_signature_status(&signature_obj)? {
             Some(Ok(())) => {
                 info!("Transaction confirmed successfully!");
                 confirmed = true;
                 break;
-            },
+            }
             Some(Err(e)) => {
                 return Err(anyhow!("Transaction failed: {:?}", e));
-            },
+            }
             None => {
-                debug!("Transaction not yet confirmed (attempt {}/{})", attempt, max_retries);
+                debug!(
+                    "Transaction not yet confirmed (attempt {}/{})",
+                    attempt, max_retries
+                );
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
             }
         }
     }
-    
+
     if !confirmed {
-        return Err(anyhow!("Transaction not confirmed after {} attempts", max_retries));
+        return Err(anyhow!(
+            "Transaction not confirmed after {} attempts",
+            max_retries
+        ));
     }
 
-    info!("View transaction on Solscan: https://solscan.io/tx/{}", signature);
+    info!(
+        "View transaction on Solscan: https://solscan.io/tx/{}",
+        signature
+    );
 
     Ok(())
 }

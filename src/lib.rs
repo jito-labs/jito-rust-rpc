@@ -1,16 +1,14 @@
-
 #[cfg(feature = "use-solana-types")]
 pub mod solana_types;
 
 use anyhow::{anyhow, Result};
-use reqwest::{Client, StatusCode};
+use rand::prelude::IndexedRandom;
+use reqwest::{Client, Response, StatusCode};
 use serde_json::{json, Value};
 use std::fmt;
 use std::fmt::Display;
 use std::sync::Arc;
 use tracing::{debug, trace};
-use rand::prelude::IndexedRandom;
-use crate::JitoRpcErrorObject::RpcError;
 
 #[derive(Clone)]
 pub struct JitoJsonRpcSDK {
@@ -24,7 +22,10 @@ pub struct PrettyJsonValue(pub Value);
 
 impl fmt::Display for PrettyJsonValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(&self.0).unwrap())
+        match serde_json::to_string_pretty(&self.0) {
+            Ok(pretty) => write!(f, "{}", pretty),
+            Err(_) => write!(f, "<invalid JSON>"),
+        }
     }
 }
 
@@ -34,11 +35,14 @@ impl From<Value> for PrettyJsonValue {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub enum JitoRpcErrorObject {
     HttpError(Arc<reqwest::Error>),
-    RpcError{ code: i64, message: String, http_status: StatusCode },
+    RpcError {
+        code: i64,
+        message: String,
+        http_status: StatusCode,
+    },
 }
 
 impl From<reqwest::Error> for JitoRpcErrorObject {
@@ -51,19 +55,32 @@ impl Display for JitoRpcErrorObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             JitoRpcErrorObject::HttpError(err) => write!(f, "HTTP Error: {}", err),
-            JitoRpcErrorObject::RpcError { code, message, http_status } =>  write!(f, "RPC Error {}: {} (http status {})", code, message, http_status),
+            JitoRpcErrorObject::RpcError {
+                code,
+                message,
+                http_status,
+            } => write!(
+                f,
+                "RPC Error {}: {} (http status {})",
+                code, message, http_status
+            ),
         }
     }
 }
 
 impl std::error::Error for JitoRpcErrorObject {}
 
-
 impl JitoJsonRpcSDK {
     /// base_url example: "https://mainnet.block-engine.jito.wtf"
     pub fn new_with_base_url(base_url: &str, jito_auth_uuid: Option<String>) -> Self {
-        assert!(!base_url.ends_with("/api/v1"), "Base URL must NOT include the version");
-        assert!(!base_url.ends_with("/"), "Base URL must NOT end ith slash");
+        assert!(
+            !base_url.ends_with("/api/v1"),
+            "Base URL must NOT include the version"
+        );
+        assert!(
+            !base_url.ends_with("/"),
+            "Base URL must NOT end with a slash"
+        );
         Self {
             base_url: base_url.to_string(),
             jito_auth_uuid,
@@ -83,14 +100,16 @@ impl JitoJsonRpcSDK {
             "jsonrpc": "2.0",
             "id": 1,
             "method": method,
-            "params": params.unwrap_or(json!([]))
+            "params": params.unwrap_or_else(|| json!([]))
         });
 
-        trace!("Sending request to: {}", url);
-        trace!(
-            "Request body: {}",
-            serde_json::to_string_pretty(&data).unwrap()
-        );
+        // Only log if the corresponding tracing level is enabled
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!("Sending request to: {}", url);
+            if let Ok(pretty) = serde_json::to_string_pretty(&data) {
+                trace!("Request body:\n{}", pretty);
+            }
+        }
 
         let response = self
             .client
@@ -100,40 +119,14 @@ impl JitoJsonRpcSDK {
             .send()
             .await?;
 
-        let status = response.status();
-        debug!("Response status: {}", status);
-
-        let body = response.json::<Value>().await?;
-        if tracing::level_enabled!(tracing::Level::TRACE) {
-            trace!(
-                "Raw response body: {}",
-                serde_json::to_string_pretty(&body).unwrap()
-            );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!("Response status: {}", response.status());
         }
 
-        // handle error independently of http status code
-        if body["error"].is_object() {
-            let error_object = body["error"].as_object().unwrap();
-            if let (Some(code), Some(message)) = (error_object.get("code"), error_object.get("message")) {
-                let code: Option<i64> = code.as_i64();
-                let message: Option<&str> = message.as_str();
-                let http_status = status;
-                // note: we assume that
-                trace!("Error code: {:?}, message: {:?}, http status: {}", code, message, http_status);
-
-                return Err(RpcError {
-                    code: code.unwrap_or_default(),
-                    message: message.unwrap_or_default().to_string(),
-                    http_status,
-                })
-            }
-
-        }
-
-        Ok(body)
+        check_response_and_return(response).await
     }
 
-    pub async fn get_tip_accounts(&self) -> Result<Value, JitoRpcErrorObject>{
+    pub async fn get_tip_accounts(&self) -> Result<Value, JitoRpcErrorObject> {
         let endpoint = if let Some(uuid) = &self.jito_auth_uuid {
             format!("/api/v1/bundles?uuid={}", uuid)
         } else {
@@ -147,9 +140,10 @@ impl JitoJsonRpcSDK {
     pub async fn get_random_tip_account(&self) -> Result<String> {
         let tip_accounts_response = self.get_tip_accounts().await?;
 
-        let tip_accounts = tip_accounts_response["result"]
-            .as_array()
-            .ok_or_else(|| anyhow!("Failed to parse tip accounts as array"))?;
+        let tip_accounts = tip_accounts_response
+            .get("result")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| anyhow!("Failed to parse 'result' as an array of tip accounts"))?;
 
         if tip_accounts.is_empty() {
             return Err(anyhow!("No tip accounts available"));
@@ -180,7 +174,15 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    pub async fn send_bundle_base64(&self, txlist_encoded: Vec<String>) -> Result<Value, anyhow::Error> {
+    pub async fn send_bundle_base64(
+        &self,
+        encoded_txs: Vec<String>,
+    ) -> Result<Value, anyhow::Error> {
+        if encoded_txs.is_empty() {
+            return Err(anyhow!(
+                "Transaction bundle is empty: expected at least one transaction to send"
+            ));
+        }
         let mut endpoint = "/api/v1/bundles".to_string();
 
         if let Some(uuid) = self.jito_auth_uuid.as_deref() {
@@ -188,7 +190,7 @@ impl JitoJsonRpcSDK {
         }
 
         let request_params = json!([
-            txlist_encoded,
+            encoded_txs,
             {
                 "encoding": "base64"
             }
@@ -199,61 +201,74 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    pub async fn send_bundle(&self, params: Option<Value>, jito_auth_uuid: Option<&str>) -> Result<Value, anyhow::Error> {
-        let mut endpoint = "/api/v1/bundles".to_string();
-        
-        if let Some(uuid) = jito_auth_uuid {
-            endpoint = format!("{}?uuid={}", endpoint, uuid);
-        }
-    
-        // Create the parameters for the request
+    pub async fn send_bundle(
+        &self,
+        params: Option<Value>,
+        jito_auth_uuid: Option<&str>,
+    ) -> Result<Value, anyhow::Error> {
+        // Construct the endpoint
+        let endpoint = match jito_auth_uuid {
+            Some(uuid) => format!("/api/v1/bundles?uuid={uuid}"),
+            None => "/api/v1/bundles".to_string(),
+        };
+
+        // Prepare request parameters
         let request_params = match params {
-            // If params is already in the correct format [transactions, {encoding: "base64"}]
-            Some(ref value) if value.is_array() && value.as_array().unwrap().len() == 2 => {
-                // Use it as is
-                value.clone()
-            },
+            Some(Value::Array(ref arr)) if arr.len() == 2 => {
+                // Assume already in correct format: [transactions, {"encoding": "base64"}]
+                Value::Array(arr.clone())
+            }
+            // Note : this is matched when we just send txs as an array like params : [tx1,tx2..]
             Some(Value::Array(transactions)) => {
-                // Validate transactions
                 if transactions.is_empty() {
                     return Err(anyhow!("Bundle must contain at least one transaction"));
                 }
                 if transactions.len() > 5 {
                     return Err(anyhow!("Bundle can contain at most 5 transactions"));
                 }
-                
+
                 json!([
                     transactions,
-                    {
-                        "encoding": "base64"
-                    }
+                    { "encoding": "base64" }
                 ])
-            },
-            _ => return Err(anyhow!("Invalid bundle format: expected an array of transactions")),
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Invalid bundle format: expected an array of transactions"
+                ))
+            }
         };
-    
+
+        // Send the RPC request
         self.send_request(&endpoint, "sendBundle", Some(request_params))
             .await
-            .map_err(|e| anyhow!("Request error: {}", e))
+            .map_err(|err| anyhow!("Failed to send bundle: {err:#}"))
     }
 
-    pub async fn send_txn(&self, params: Option<Value>, bundle_only: bool) -> Result<Value, JitoRpcErrorObject> {
-        let mut query_params = Vec::new();
-
-        if bundle_only {
-            query_params.push("bundleOnly=true".to_string());
-        }
-
-        let endpoint = if query_params.is_empty() {
-            "/api/v1/transactions".to_string()
-        } else {
-            format!("/api/v1/transactions?{}", query_params.join("&"))
+    pub async fn send_txn(
+        &self,
+        params: Option<Value>,
+        bundle_only: bool,
+    ) -> Result<Value, JitoRpcErrorObject> {
+        let endpoint = {
+            let query_param = if bundle_only {
+                Some("bundleOnly=true")
+            } else {
+                None
+            };
+            match query_param {
+                Some(q) => format!("/api/v1/transactions?{}", q),
+                None => "/api/v1/transactions".to_string(),
+            }
         };
 
         let params = match params {
             Some(Value::Object(map)) => {
                 let tx = map.get("tx").and_then(Value::as_str).unwrap_or_default();
-                let skip_preflight = map.get("skipPreflight").and_then(Value::as_bool).unwrap_or(false);
+                let skip_preflight = map
+                    .get("skipPreflight")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 json!([
                     tx,
                     {
@@ -261,11 +276,12 @@ impl JitoJsonRpcSDK {
                         "skipPreflight": skip_preflight
                     }
                 ])
-            },
+            }
             _ => json!([]),
         };
 
-        self.send_request(&endpoint, "sendTransaction", Some(params)).await
+        self.send_request(&endpoint, "sendTransaction", Some(params))
+            .await
     }
 
     pub async fn get_in_flight_bundle_statuses(&self, bundle_uuids: Vec<String>) -> Result<Value> {
@@ -282,9 +298,55 @@ impl JitoJsonRpcSDK {
             .map_err(|e| anyhow!("Request error: {}", e))
     }
 
-    // Helper method 
+    // Helper method
     pub fn prettify(value: Value) -> PrettyJsonValue {
         PrettyJsonValue(value)
     }
 }
 
+async fn check_response_and_return(response: Response) -> Result<Value, JitoRpcErrorObject> {
+    let status = response.status();
+
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        debug!("Response status: {}", status);
+    }
+
+    let body: Value = response.json().await?;
+
+    if tracing::level_enabled!(tracing::Level::TRACE) {
+        if let Ok(pretty) = serde_json::to_string_pretty(&body) {
+            trace!("Raw response body:\n{pretty}");
+        }
+    }
+
+    if let Some(error_obj) = body.get("error").and_then(|e| e.as_object()) {
+        let code = error_obj
+            .get("code")
+            .and_then(|v| v.as_i64())
+            .unwrap_or_default();
+
+        let message = error_obj
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown error")
+            .to_string();
+
+        // note: we assume that
+        if tracing::level_enabled!(tracing::Level::TRACE) {
+            trace!(
+                "Jito RPC returned error: code = {}, message = \"{}\", http_status = {}",
+                code,
+                message,
+                status
+            );
+        }
+
+        return Err(JitoRpcErrorObject::RpcError {
+            code,
+            message,
+            http_status: status,
+        });
+    }
+
+    Ok(body)
+}
