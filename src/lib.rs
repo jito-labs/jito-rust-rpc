@@ -56,13 +56,16 @@ impl JitoJsonRpcSDK {
             serde_json::to_string_pretty(&data).unwrap()
         );
 
-        let response = self
+        let mut request = self
             .client
             .post(&url)
-            .header("Content-Type", "application/json")
-            .json(&data)
-            .send()
-            .await?;
+            .header("Content-Type", "application/json");
+
+        if let Some(uuid) = &self.uuid {
+            request = request.header("x-jito-auth", uuid);
+        }
+
+        let response = request.json(&data).send().await?;
 
         let status = response.status();
         debug!("Response status: {}", status);
@@ -209,5 +212,51 @@ impl JitoJsonRpcSDK {
     // Helper method 
     pub fn prettify(value: Value) -> PrettyJsonValue {
         PrettyJsonValue(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+
+    #[tokio::test]
+    async fn send_transaction_includes_uuid_auth_header() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let bytes_read = stream.read(&mut buffer).await.unwrap();
+                assert_ne!(bytes_read, 0, "connection closed before headers arrived");
+                request.extend_from_slice(&buffer[..bytes_read]);
+            }
+
+            let response_body = r#"{"jsonrpc":"2.0","result":"signature","id":1}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+
+            String::from_utf8(request).unwrap()
+        });
+
+        let sdk = JitoJsonRpcSDK::new(&format!("http://{address}"), Some("test-uuid".to_string()));
+        sdk.send_txn(Some(json!({ "tx": "signed-transaction" })), false)
+            .await
+            .unwrap();
+
+        let request = server.await.unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("post /transactions http/1.1\r\n"));
+        assert!(request.contains("\r\nx-jito-auth: test-uuid\r\n"));
     }
 }
